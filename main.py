@@ -3,6 +3,7 @@ import requests
 from dotenv import load_dotenv
 from yt_dlp import YoutubeDL
 
+# Environment Variables Load karein
 load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -11,6 +12,8 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 VIDEO_DIR = "downloads"
 os.makedirs(VIDEO_DIR, exist_ok=True)
+
+# --- Helper Functions ---
 
 def read_file(path):
     if not os.path.exists(path):
@@ -22,6 +25,47 @@ def write_history(url):
     with open("history.txt", "a") as f:
         f.write(url + "\n")
 
+def upload_video_robust(file_path):
+    """
+    Yeh function pehle Catbox try karega.
+    Agar Catbox fail hua, toh File.io try karega.
+    """
+    # 1. Try Catbox
+    try:
+        print("🚀 Uploading to Catbox...")
+        with open(file_path, "rb") as f:
+            r = requests.post(
+                "https://catbox.moe/user/api.php",
+                data={"reqtype": "fileupload"},
+                files={"fileToUpload": f},
+                timeout=120 # 2 minute timeout
+            )
+        if r.status_code == 200:
+            return r.text.strip()
+        else:
+            print(f"⚠️ Catbox Error (Status {r.status_code}): {r.text}")
+    except Exception as e:
+        print(f"⚠️ Catbox Connection Failed: {e}")
+
+    # 2. Try File.io (Backup)
+    try:
+        print("🔄 Switching to Backup (File.io)...")
+        with open(file_path, "rb") as f:
+            # Expires in 2 weeks (2w)
+            r = requests.post("https://file.io/?expires=2w", files={"file": f}, timeout=120)
+        
+        if r.status_code == 200:
+            return r.json().get("link")
+        else:
+            print(f"⚠️ File.io Error (Status {r.status_code}): {r.text}")
+    except Exception as e:
+        print(f"⚠️ File.io Connection Failed: {e}")
+
+    # Agar dono fail ho gaye
+    raise Exception("❌ All upload servers failed! Cannot proceed.")
+
+# --- Main Logic ---
+
 links = read_file("links.txt")
 history = read_file("history.txt")
 
@@ -32,12 +76,12 @@ for link in links:
         break
 
 if not video_url:
-    print("No new video found")
+    print("💤 No new video found to process.")
     exit()
 
-# --- MAIN PROCESS START ---
+# Try-Except Block (Poora process safe rakhne ke liye)
 try:
-    print(f"Processing: {video_url}")
+    print(f"🎬 Processing: {video_url}")
     
     ydl_opts = {
         "outtmpl": f"{VIDEO_DIR}/video.%(ext)s",
@@ -45,65 +89,60 @@ try:
         "quiet": True
     }
 
-    # 1. Download Video
+    # Step 1: Download
+    print("⬇️ Downloading video...")
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(video_url, download=True)
         caption = info.get("description", "") or info.get("title", "")
         video_path = ydl.prepare_filename(info)
 
-    # 2. Upload to Catbox
-    print("Uploading to Catbox...")
-    with open(video_path, "rb") as f:
-        r = requests.post(
-            "https://catbox.moe/user/api.php",
-            data={"reqtype": "fileupload"},
-            files={"fileToUpload": f}
-        )
-    
-    # Check agar Catbox ne error diya
-    if r.status_code != 200:
-        raise Exception(f"Catbox Upload Failed: {r.text}")
+    if not os.path.exists(video_path):
+        raise Exception("Download failed, file not found.")
 
-    catbox_url = r.text.strip()
-    print(f"Uploaded: {catbox_url}")
+    # Step 2: Upload (With Backup)
+    final_video_link = upload_video_robust(video_path)
+    print(f"✅ Upload Success: {final_video_link}")
 
-    # 3. Send to Telegram
-    print("Sending to Telegram...")
+    # Step 3: Send to Telegram
+    print("✈️ Sending to Telegram...")
     telegram_api = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
     tg_resp = requests.post(
         telegram_api,
         data={
             "chat_id": CHAT_ID,
-            "video": catbox_url,
+            "video": final_video_link,
             "caption": caption
         }
     )
     
-    # Check agar Telegram ne error diya
     if tg_resp.status_code != 200:
-        raise Exception(f"Telegram Send Failed: {tg_resp.text}")
+        raise Exception(f"Telegram Failed: {tg_resp.text}")
 
-    # 4. Send to Webhook
-    print("Sending to Webhook...")
-    wb_resp = requests.post(
-        WEBHOOK_URL,
-        json={"video_url": catbox_url}
-    )
-    
-    # Check agar Webhook ne error diya
-    if wb_resp.status_code != 200:
-        raise Exception(f"Webhook Failed: {wb_resp.text}")
+    # Step 4: Send to Webhook
+    if WEBHOOK_URL:
+        print("🔗 Sending to Webhook...")
+        wb_resp = requests.post(
+            WEBHOOK_URL,
+            json={"video_url": final_video_link}
+        )
+        if wb_resp.status_code != 200:
+            print(f"⚠️ Webhook Warning: {wb_resp.text}") 
+            # Webhook fail hone par history save rokna hai to neeche 'raise' uncomment karein:
+            # raise Exception("Webhook Failed")
 
-    # --- SUCCESS ---
-    # Sab kuch sahi raha to ab history save karenge
+    # --- FINAL SUCCESS ---
     write_history(video_url)
-    print("✅ Work Success! Link saved to history.")
+    print("🎉 All Done! Link saved to history.")
 
-    # (Optional) Downloaded file delete kar do space bachane ke liye
+    # Cleanup (Delete downloaded file)
     if os.path.exists(video_path):
         os.remove(video_path)
+        print("🗑️ Temp file cleaned up.")
 
 except Exception as e:
-    # Agar kahin bhi error aaya to yahan aayega aur history save NAHI karega
-    print(f"❌ Error occurred: {e}")
-    print("⚠️ History not updated because the task failed.")
+    print("\n------------------------------------------------")
+    print(f"❌ PROCESS FAILED: {e}")
+    print("⚠️ History was NOT updated. Will retry this link next time.")
+    print("------------------------------------------------\n")
+    # GitHub Actions ko fail dikhane ke liye exit code 1
+    exit(1)
