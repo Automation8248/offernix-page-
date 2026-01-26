@@ -2,10 +2,10 @@ name: Daily Insta Bot
 
 on:
   schedule:
-    # 12:30 UTC = 6:00 PM IST (India Time)
-    - cron: '30 12 * * *'
-  workflow_dispatch: # Manual Run ke liye button
-
+    # UTC 10:30 = IST 4:00 PM
+    - cron: '30 10 * * *'
+  workflow_dispatch: # Manual Run Button
+  
 permissions:
   contents: write # History file update karne ki permission
 
