@@ -2,17 +2,17 @@ name: Daily Insta Bot
 
 on:
   schedule:
-    # 14:30 UTC = 8:00 PM IST (India Time)
-    - cron: '30 14 * * *'
-  workflow_dispatch: # Manual Run Button
+    # 5:30 UTC = 11:00 AM IST (India Time)
+    - cron: '30 5 * * *'
+  workflow_dispatch: # Manual Run Button (Testing ke liye)
 
 permissions:
-  contents: write
+  contents: write # History file update karne ke liye zaroori
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 15 # Agar latak gaya to 15 min mein band ho jayega
 
     steps:
       - name: Checkout Code
@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Chrome
+      - name: Install Google Chrome
         run: |
           wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
@@ -35,7 +35,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Script
+      - name: Run Python Script
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -45,10 +45,17 @@ jobs:
       - name: Save History
         if: success()
         run: |
-          git config --global user.name "AutoBot"
+          git config --global user.name "Automation Bot"
           git config --global user.email "bot@github.com"
           git add history.txt
-          git commit -m "Video Processed" || exit 0
+          git commit -m "Update history: Processed new video" || exit 0
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload Error Log (If Failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-debug
+          path: error_debug.png
