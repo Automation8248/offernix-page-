@@ -6,6 +6,11 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch: # Manual Run Button
 
+# ✅ Force run: new run will cancel old in-progress run
+concurrency:
+  group: daily-insta-bot
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -35,12 +40,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ✅ Force run: retry if script fails (3 attempts)
       - name: Run Python Script
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-        run: python script.py
+        run: |
+          set -e
+          for i in 1 2 3; do
+            echo "▶️ Running script attempt $i/3..."
+            if python script.py; then
+              echo "✅ Script succeeded on attempt $i"
+              break
+            fi
+            echo "❌ Script failed on attempt $i"
+            if [ "$i" -eq 3 ]; then
+              echo "🛑 All attempts failed"
+              exit 1
+            fi
+            echo "⏳ Retrying in 20 seconds..."
+            sleep 20
+          done
 
       - name: Save History
         if: success()
