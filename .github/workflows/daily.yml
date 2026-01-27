@@ -2,17 +2,17 @@ name: Daily Insta Bot
 
 on:
   schedule:
-    # 5:30 UTC = 11:00 AM IST (India Time)
-    - cron: '30 5 * * *'
-  workflow_dispatch: # Manual Run Button (Testing ke liye)
+    # 6:00 UTC = 11:30 AM IST (India Time)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Manual Run Button
 
 permissions:
-  contents: write # History file update karne ke liye zaroori
+  contents: write
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # Agar latak gaya to 15 min mein band ho jayega
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Code
@@ -48,12 +48,12 @@ jobs:
           git config --global user.name "Automation Bot"
           git config --global user.email "bot@github.com"
           git add history.txt
-          git commit -m "Update history: Processed new video" || exit 0
+          git commit -m "Video Processed" || exit 0
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Upload Error Log (If Failed)
+      - name: Upload Error Log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
