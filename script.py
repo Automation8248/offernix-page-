@@ -60,7 +60,9 @@ def download_via_sssinstagram(insta_link):
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    driver = uc.Chrome(options=options, version_main=None)
+    # --- IMPORTANT FIX: 'None' ki jagah '144' kiya hai taaki crash na ho ---
+    driver = uc.Chrome(options=options, version_main=144)
+    
     video_path = "final_video.mp4"
     processed_caption = "New Reel" 
     
@@ -111,6 +113,127 @@ def download_via_sssinstagram(insta_link):
                 if len(text) > 5 and "Download" not in text:
                     raw_caption = text
                     break
+            
+            if raw_caption:
+                processed_caption = clean_caption(raw_caption)
+        except:
+            pass
+
+        if not video_url: raise Exception("Video URL Not Found")
+
+        print(f"🔗 Video Link Found...")
+
+        # Download
+        r = requests.get(video_url, stream=True)
+        with open(video_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024):
+                f.write(chunk)
+        
+        if os.path.getsize(video_path) < 50000:
+             raise Exception("File too small.")
+
+        return video_path, processed_caption
+
+    except Exception as e:
+        print(f"❌ Browser Error: {e}")
+        driver.save_screenshot("error_debug.png")
+        return None, None
+    finally:
+        driver.quit()
+
+def upload_to_catbox(file_path):
+    print("☁️ Uploading to Catbox...")
+    try:
+        with open(file_path, "rb") as f:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            r = requests.post("https://catbox.moe/user/api.php", 
+                            data={"reqtype": "fileupload"}, 
+                            files={"fileToUpload": f},
+                            headers=headers)
+            if r.status_code == 200: 
+                return r.text.strip()
+            else:
+                print(f"⚠️ Catbox Error: {r.status_code}")
+                return None
+    except Exception as e:
+        print(f"Upload Error: {e}")
+    return None
+
+def send_notification(video_url, clean_text, original_link):
+    print("🚀 Preparing Post...")
+    
+    # --- 1. CAPTION FORMATTING ---
+    # User Requirement: Text -> . . . -> Hashtags
+    final_caption = f"{clean_text}\n.\n.\n.\n.\n.\n{SEO_HASHTAGS}"
+    
+    # --- 2. TELEGRAM (Send VIDEO, Not Link) ---
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        print(f"📨 Sending Video to Telegram...")
+        try:
+            # sendVideo endpoint use kar rahe hain
+            # 'video' parameter mein URL dene se Telegram khud download karke play karta hai
+            api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+            payload = {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "video": video_url,  # Catbox URL (Telegram treats this as video file)
+                "caption": final_caption
+            }
+            r = requests.post(api_url, json=payload)
+            
+            if r.status_code == 200:
+                print("✅ Telegram Video Sent Successfully!")
+            else:
+                print(f"❌ Telegram Error {r.status_code}: {r.text}")
+        except Exception as e:
+            print(f"❌ Telegram Failed: {e}")
+    else:
+        print("⚠️ Telegram Config Missing.")
+
+    # --- 3. WEBHOOK (Mandatory) ---
+    if WEBHOOK_URL:
+        print("📨 Sending to Webhook...")
+        try:
+            r = requests.post(WEBHOOK_URL, json={
+                "video_url": video_url, 
+                "caption": final_caption,
+                "raw_caption": clean_text,
+                "source": original_link
+            })
+            print(f"Webhook Status: {r.status_code}")
+        except Exception as e:
+            print(f"❌ Webhook Failed: {e}")
+    else:
+        print("❌ CRITICAL: WEBHOOK_URL is missing in Secrets!")
+
+def update_history(link):
+    with open(HISTORY_FILE, 'a') as f: f.write(link + "\n")
+
+if __name__ == "__main__":
+    # Webhook Check (Optional nahi hai ab)
+    if not WEBHOOK_URL:
+        print("❌ ERROR: Webhook URL is REQUIRED but missing.")
+    
+    link = get_next_link()
+    if link:
+        print(f"🎯 Processing: {link}")
+        
+        video_file, clean_text = download_via_sssinstagram(link)
+        
+        if video_file and os.path.exists(video_file):
+            catbox_link = upload_to_catbox(video_file)
+            
+            if catbox_link:
+                print(f"✅ Cloud Link: {catbox_link}")
+                send_notification(catbox_link, clean_text, link)
+                update_history(link)
+                os.remove(video_file)
+            else:
+                print("❌ Catbox Upload Failed.")
+        else:
+            print("❌ Download Failed.")
+            exit(1)
+    else:
+        print("💤 No new links.")                    break
             
             if raw_caption:
                 processed_caption = clean_caption(raw_caption)
