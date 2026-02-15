@@ -2,9 +2,11 @@ name: Daily Video Bot
 
 on:
   schedule:
-    - cron: '30 5 * * *'  # Daily run (Time adjust karein)
-  workflow_dispatch:      # Manual trigger button
-
+    # New York: 8:00 AM (Morning) | India: 6:30 PM (Evening)
+    # GitHub UTC time use karta hai: 13:00 UTC
+    - cron: '0 13 * * *' 
+  workflow_dispatch:
+  
 permissions:
   contents: write         # Write permission zaroori hai delete/update ke liye
 
