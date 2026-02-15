@@ -2,9 +2,7 @@ import os
 import json
 import random
 import requests
-import re
 import datetime
-import urllib.parse
 
 # --- CONFIGURATION ---
 VIDEO_FOLDER = "videos"
@@ -12,11 +10,48 @@ HISTORY_FILE = "history.json"
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY")
+
+# Yahan maine image se dekh kar aapka exact Repo Name daal diya hai
+GITHUB_REPO = "Automation8248/offernix-page-" 
 BRANCH_NAME = "main"
 
-# --- FIXED CAPTION & TAGS (Jo aapne diya hai) ---
-PERMANENT_CAPTION = """New video post
+# --- DATA GRID (Pre-saved Titles & Captions) ---
+
+# List 1: Titles (Har bar inme se koi ek randomly select hoga)
+TITLES_GRID = [
+    "Most Viral Gadget of 2026 😱",
+    "You Need This Product Now!",
+    "Best Amazon Find Today 🔥",
+    "This Will Change Your Life",
+    "Smartest Gadget I Found Online",
+    "Don't Miss This Deal!",
+    "Top Rated Product Review",
+    "Why Everyone is Buying This?",
+    "Coolest Tech Under $50",
+    "Must Have Home Gadget",
+    "Unbelievable Useful Tool",
+    "Stop Scrolling and Watch This!",
+    "The Ultimate Problem Solver",
+    "Best Gift Idea for 2026",
+    "Hidden Gem Product Found 💎"
+]
+
+# List 2: Captions (Har bar inme se koi ek randomly select hoga)
+CAPTIONS_GRID = [
+    "This product is going viral for a reason. Check out the features!",
+    "I honestly didn't expect this to be so good. Highly recommended.",
+    "If you are looking for an upgrade, this is the perfect choice for you.",
+    "Grab this deal before the price goes up! Link in bio.",
+    "Tag a friend who needs this in their life right now.",
+    "Limited time offer on this amazing gadget. Don't wait!",
+    "This is by far the most useful thing I have bought this year.",
+    "Serious quality and great price. You won't regret buying this.",
+    "Make your life easier with this smart tool. Order yours today.",
+    "The design and functionality are just perfect. 10/10 from me."
+]
+
+# List 3: Fixed Hashtags (Ye har video me SAME rahega)
+FIXED_HASHTAGS = """
 .
 .
 .
@@ -25,46 +60,6 @@ PERMANENT_CAPTION = """New video post
 #AffiliateMarketing #OnlineEarning #PassiveIncome #MakeMoneyOnline #EarnOnline #DigitalMarketing #InternetMarketing #SideIncome #SmartIncome #ProductReview #ProductVideo #BestProduct #TrendingProduct #TopDeals #MustBuy #UnboxingVideo #ProductDemo #HonestReview #WorthBuying #BuyNow #BestDeal #DiscountOffer #LimitedOffer #OfferAlert #SaleAlert #DealOfTheDay #OnlineShopping #BestPrice #ReelsIndia #InstaReels #ViralReels #TrendingReels #ExplorePage #YoutubeShorts #ShortsVideo #ViralVideo #IndianAffiliate #IndiaDeals #IndianProducts #DesiDeals"""
 
 # --- HELPER FUNCTIONS ---
-
-def clean_title(text):
-    """
-    Sirf Title ke liye: No *, ., #, [], ()
-    """
-    if not text: return ""
-    # Remove specific characters
-    cleaned = re.sub(r'[*\.#\[\]\(\)]', '', text)
-    # Remove multiple spaces
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-    return cleaned
-
-def get_ai_title(filename):
-    """
-    Pollination AI se sirf unique Title generate karega.
-    """
-    clean_filename = filename.replace("_", " ").replace("-", " ").split(".")[0]
-    
-    # Prompt: Explicitly asking to RENAME the product
-    prompt = (
-        f"Act as a copywriter. I have a video file named '{clean_filename}'. "
-        "Write a short, catchy, 5-word product title for this. "
-        "Do not use the exact filename. Make it sound like a hot new gadget or tool. "
-        "Do not use hashtags or emojis in the title."
-    )
-    
-    encoded_prompt = urllib.parse.quote(prompt)
-    url = f"https://text.pollinations.ai/{encoded_prompt}"
-    
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            raw_title = response.text
-            final_title = clean_title(raw_title)
-            return final_title
-        else:
-            return f"Amazing New Product {clean_filename}"
-    except Exception as e:
-        print(f"AI Generation Failed: {e}")
-        return f"Smart Gadget {clean_filename}"
 
 def load_history():
     if not os.path.exists(HISTORY_FILE):
@@ -117,15 +112,17 @@ def run_automation():
     video_to_send = random.choice(available_videos)
     video_path = os.path.join(VIDEO_FOLDER, video_to_send)
     
-    print(f"Selected Video: {video_to_send}")
+    print(f"Selected Video File: {video_to_send}")
 
-    # 3. GENERATE TITLE ONLY
-    generated_title = get_ai_title(video_to_send)
+    # 3. RANDOM SELECTION (Grid System)
+    selected_title = random.choice(TITLES_GRID)
+    selected_caption = random.choice(CAPTIONS_GRID)
     
-    # Combine Title + Fixed Caption
-    full_caption_text = f"{generated_title}\n\n{PERMANENT_CAPTION}"
+    # Combine content
+    full_telegram_caption = f"{selected_title}\n\n{selected_caption}\n{FIXED_HASHTAGS}"
     
-    print(f"Final Title: {generated_title}")
+    print(f"Generated Title: {selected_title}")
+    print(f"Generated Caption: {selected_caption}")
 
     # 4. SEND TO TELEGRAM
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
@@ -134,7 +131,7 @@ def run_automation():
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
             payload = {
                 'chat_id': TELEGRAM_CHAT_ID, 
-                'caption': full_caption_text
+                'caption': full_telegram_caption
             }
             files = {'video': video_file}
             try:
@@ -143,19 +140,23 @@ def run_automation():
                 print(f"Telegram Error: {e}")
 
     # 5. SEND TO WEBHOOK
-    if WEBHOOK_URL and GITHUB_REPO:
+    if WEBHOOK_URL:
         print("Sending to Webhook...")
+        # URL construction with your specific repo name
         raw_video_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{BRANCH_NAME}/{VIDEO_FOLDER}/{video_to_send}"
+        # Encode spaces if any
         raw_video_url = raw_video_url.replace(" ", "%20")
         
         webhook_data = {
             "video_url": raw_video_url,
-            "title": generated_title,
-            "caption": PERMANENT_CAPTION,
+            "title": selected_title,
+            "caption": selected_caption,
+            "hashtags": FIXED_HASHTAGS,
             "source": "AffiliateBot"
         }
         try:
             requests.post(WEBHOOK_URL, json=webhook_data)
+            print(f"Webhook Sent: {raw_video_url}")
         except Exception as e:
             print(f"Webhook Error: {e}")
 
