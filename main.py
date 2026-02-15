@@ -671,7 +671,12 @@ FIXED_HASHTAGS = """
 #AffiliateMarketing #OnlineEarning #PassiveIncome #MakeMoneyOnline #EarnOnline #DigitalMarketing #InternetMarketing #SideIncome #SmartIncome #ProductReview #ProductVideo #BestProduct #TrendingProduct #TopDeals #MustBuy #UnboxingVideo #ProductDemo #HonestReview #WorthBuying #BuyNow #BestDeal #DiscountOffer #LimitedOffer #OfferAlert #SaleAlert #DealOfTheDay #OnlineShopping #BestPrice #ReelsIndia #InstaReels #ViralReels #TrendingReels #ExplorePage #YoutubeShorts #ShortsVideo #ViralVideo #IndianAffiliate #IndiaDeals #IndianProducts #DesiDeals"""
 
 # Isse AFFILIATE_HASHTAGS se badal kar INSTA_HASHTAGS kar diya hai
-INSTA_HASHTAGS = "#Affiliate #BestDeals #SmartGadgets #TopProduct #Shopping"
+INSTA_HASHTAGS = """
+.
+.
+.
+.
+"#Affiliate #BestDeals #SmartGadgets #TopProduct #Shopping"
 
 
 # --- HELPER FUNCTIONS ---
