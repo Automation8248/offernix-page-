@@ -1,103 +1,176 @@
 import os
+import json
+import random
 import requests
+import re
+import datetime
+import urllib.parse
 
-# GitHub Secrets
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+# --- CONFIGURATION ---
+VIDEO_FOLDER = "videos"
+HISTORY_FILE = "history.json"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY")  # Format: username/repo
+BRANCH_NAME = "main"  # Ya 'master' check kar lena
 
-VIDEO_DIR = "videos"
+# --- HELPER FUNCTIONS ---
 
-def upload_to_catbox(file_path):
-    """वीडियो को Catbox.moe पर अपलोड करके डायरेक्ट लिंक देता है"""
-    url = "https://catbox.moe/user/api.php"
-    data = {"reqtype": "fileupload"}
+def clean_text(text):
+    """
+    User condition: No *, ., #, or brackets [] ()
+    """
+    # Remove specific characters
+    cleaned = re.sub(r'[*\.#\[\]\(\)]', '', text)
+    # Remove multiple spaces and strip
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned
+
+def get_pollination_text(filename):
+    """
+    Uses Pollination AI (No API Key) to generate text based on filename.
+    """
+    clean_filename = filename.replace("_", " ").replace("-", " ").split(".")[0]
+    
+    # Prompt engineering specifically for this logic
+    prompt = (
+        f"Write a short engaging viral caption for a video titled '{clean_filename}'. "
+        "Include SEO keywords at the end. "
+        "Do not use emojis. Keep it under 50 words."
+    )
+    
+    encoded_prompt = urllib.parse.quote(prompt)
+    url = f"https://text.pollinations.ai/{encoded_prompt}"
+    
     try:
-        with open(file_path, "rb") as f:
-            files = {"fileToUpload": f}
-            response = requests.post(url, data=data, files=files, timeout=40)
+        response = requests.get(url)
         if response.status_code == 200:
-            return response.text
-        return None
-    except Exception as e:
-        print(f"Catbox Upload Failed: {e}")
-        return None
-
-def main():
-    # 1. फोल्डर चेक करना
-    if not os.path.exists(VIDEO_DIR):
-        print(f"Error: '{VIDEO_DIR}' folder nahi mila.")
-        return
-
-    # 2. केवल वीडियो फाइल्स को ही चुनना (Filter logic)
-    video_files = sorted([f for f in os.listdir(VIDEO_DIR) if f.lower().endswith(('.mp4', '.mkv', '.mov', '.avi'))])
-    
-    if not video_files:
-        print("Folder mein koi video file (.mp4, .mkv etc) nahi mili.")
-        return
-
-    # पहली वीडियो फाइल को प्रोसेस के लिए उठाना
-    video_to_process = video_files[0]
-    file_path = os.path.join(VIDEO_DIR, video_to_process)
-    
-    # फाइल के नाम से टाइटल बनाना (एक्सटेंशन हटाकर)
-    clean_title = os.path.splitext(video_to_process)[0]
-
-    # 3. Catbox पर अपलोड करना
-    catbox_url = upload_to_catbox(file_path)
-
-    if catbox_url:
-        seo_hashtags = "#DidYouKnow #Fact #Facts #AmazingFacts #InterestingFacts #TrueFacts #MindBlowingFacts #DailyFacts #RandomFacts #FunFacts #Knowledge #KnowledgeIsPower #LearnSomethingNew #Educational #Education #Info #Information #GeneralKnowledge #GK #ScienceFacts #TechFacts #PsychologyFacts #HistoryFacts #BusinessFacts #MoneyFacts #HealthFacts #LifeFacts #MotivationFacts #Truth #Reality #ReelsIndia #InstaReels #ViralReels #TrendingReels #ExplorePage #YoutubeShorts #ShortsVideo #ViralVideo"
-
-
-        # --- टेलीग्राम फॉर्मेट (Direct Video, No Hash) ---
-        tg_caption = (
-            f"New video post\n"
-            f".\n"
-            f".\n"
-            f".\n"
-            f".\n"
-            f".\n"
-            f"{seo_hashtags}"
-        )
-
-        # --- वेबहुक फॉर्मेट (Caption + Hashtags) ---
-        webhook_caption = f"New video post\n{seo_hashtags}"
-
-        # 4. टेलीग्राम पर भेजना (Direct Video File)
-        if BOT_TOKEN and CHAT_ID:
-            try:
-                tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
-                with open(file_path, "rb") as video:
-                    requests.post(tg_url, files={"video": video}, data={"chat_id": CHAT_ID, "caption": tg_caption}, timeout=40)
-                print("Telegram: Video file successfully sent.")
-            except Exception as tg_err:
-                print(f"Telegram Error: {tg_err}")
-
-        # 5. वेबहुक पर भेजना (Make.com Logic)
-        if WEBHOOK_URL:
-            try:
-                # url = Catbox Link, caption = Text + Hashtags
-                payload = {
-                    "url": catbox_url, 
-                    "title": clean_title, 
-                    "caption": webhook_caption
-                }
-                requests.post(WEBHOOK_URL, json=payload, timeout=15)
-                print("Webhook: Success.")
-            except Exception as web_err:
-                print(f"Webhook Failed: {web_err}")
+            raw_text = response.text
+            
+            # Text ko clean karte hain (No dots, stars, hashes)
+            final_text = clean_text(raw_text)
+            
+            # Title generate karte hain (First 5 words of caption)
+            title = " ".join(final_text.split()[:6])
+            
+            return title, final_text
         else:
-            print("Warning: Webhook URL missing in Secrets.")
+            return clean_filename, f"Watch this amazing video about {clean_filename}"
+    except Exception as e:
+        print(f"AI Generation Failed: {e}")
+        return clean_filename, f"Watch this amazing video about {clean_filename}"
 
-        # 6. केवल इस्तेमाल हुई फाइल को डिलीट करना
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"Cleanup: {video_to_process} deleted.")
+def load_history():
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    with open(HISTORY_FILE, 'r') as f:
+        return json.load(f)
 
-        print(f"Workflow Complete! Processed: {catbox_url}")
-    else:
-        print("Catbox Upload Failed. Skipping post.")
+def save_history(data):
+    with open(HISTORY_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+
+# --- MAIN LOGIC ---
+
+def run_automation():
+    # 1. Purani files delete karo (15 days rule)
+    history = load_history()
+    today = datetime.date.today()
+    new_history = []
+    
+    print("Checking for files to delete (older than 15 days)...")
+    for entry in history:
+        sent_date = datetime.date.fromisoformat(entry['date_sent'])
+        days_diff = (today - sent_date).days
+        
+        file_path = os.path.join(VIDEO_FOLDER, entry['filename'])
+        
+        if days_diff >= 15:
+            # Delete file physically
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                print(f"DELETED EXPIRED VIDEO: {entry['filename']}")
+            else:
+                print(f"File already gone: {entry['filename']}")
+            # History se remove (by not adding to new_history)
+        else:
+            new_history.append(entry)
+    
+    # Save clean history immediately
+    save_history(new_history)
+    history = new_history # Update local variable
+
+    # 2. Pick New Video
+    if not os.path.exists(VIDEO_FOLDER):
+        os.makedirs(VIDEO_FOLDER)
+        
+    all_videos = [f for f in os.listdir(VIDEO_FOLDER) if f.lower().endswith(('.mp4', '.mov', '.mkv'))]
+    sent_filenames = [entry['filename'] for entry in history]
+    
+    available_videos = [v for v in all_videos if v not in sent_filenames]
+    
+    if not available_videos:
+        print("No new videos to send.")
+        return
+
+    video_to_send = random.choice(available_videos)
+    video_path = os.path.join(VIDEO_FOLDER, video_to_send)
+    
+    print(f"Selected Video: {video_to_send}")
+
+    # 3. Generate Content (Pollination AI + Cleaning)
+    title, caption = get_pollination_text(video_to_send)
+    
+    # Note: Caption mein hi keywords included honge but bina # ke (kyunki user ne mana kiya hai)
+    full_message = f"{title}\n\n{caption}"
+    
+    print(f"Generated Title: {title}")
+    print(f"Generated Caption: {caption}")
+
+    # 4. Send to Telegram (VIDEO FILE)
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        print("Sending Video File to Telegram...")
+        with open(video_path, 'rb') as video_file:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+            payload = {
+                'chat_id': TELEGRAM_CHAT_ID, 
+                'caption': full_message
+            }
+            files = {'video': video_file}
+            try:
+                r = requests.post(url, data=payload, files=files)
+                print(f"Telegram Status: {r.status_code}")
+            except Exception as e:
+                print(f"Telegram Error: {e}")
+
+    # 5. Send to Webhook (VIDEO URL)
+    if WEBHOOK_URL and GITHUB_REPO:
+        print("Sending URL to Webhook...")
+        # GitHub Raw URL Construction
+        raw_video_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{BRANCH_NAME}/{VIDEO_FOLDER}/{video_to_send}"
+        # URL mein space agar ho to encode karo
+        raw_video_url = raw_video_url.replace(" ", "%20")
+        
+        webhook_data = {
+            "video_url": raw_video_url,
+            "title": title,
+            "caption": caption,
+            "source": "GitHub Automation"
+        }
+        try:
+            r = requests.post(WEBHOOK_URL, json=webhook_data)
+            print(f"Webhook Status: {r.status_code}")
+        except Exception as e:
+            print(f"Webhook Error: {e}")
+
+    # 6. Update History
+    new_history.append({
+        "filename": video_to_send,
+        "date_sent": today.isoformat()
+    })
+    save_history(new_history)
+    print("History updated.")
 
 if __name__ == "__main__":
-    main()
+    run_automation()
