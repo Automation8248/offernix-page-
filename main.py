@@ -767,7 +767,7 @@ def run_automation():
             "title": selected_title,
             "caption": selected_caption,
             "hashtags": FIXED_HASHTAGS,
-            "insta_hashtags": INSTA_HASHTAGS,
+            "insta_hashtags": INSTA_HASHTAGS, # Make.com mein isi naam se field aayegi
             "source": "AffiliateBot"
         }
         try:
