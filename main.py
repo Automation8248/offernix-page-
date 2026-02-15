@@ -15,36 +15,40 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY")
 BRANCH_NAME = "main"
 
+# --- FIXED CAPTION & TAGS (Jo aapne diya hai) ---
+PERMANENT_CAPTION = """New video post
+.
+.
+.
+.
+.
+#AffiliateMarketing #OnlineEarning #PassiveIncome #MakeMoneyOnline #EarnOnline #DigitalMarketing #InternetMarketing #SideIncome #SmartIncome #ProductReview #ProductVideo #BestProduct #TrendingProduct #TopDeals #MustBuy #UnboxingVideo #ProductDemo #HonestReview #WorthBuying #BuyNow #BestDeal #DiscountOffer #LimitedOffer #OfferAlert #SaleAlert #DealOfTheDay #OnlineShopping #BestPrice #ReelsIndia #InstaReels #ViralReels #TrendingReels #ExplorePage #YoutubeShorts #ShortsVideo #ViralVideo #IndianAffiliate #IndiaDeals #IndianProducts #DesiDeals"""
+
 # --- HELPER FUNCTIONS ---
 
-def clean_text(text):
+def clean_title(text):
     """
-    Title aur Caption ke liye strict cleaner.
-    Removes *, ., #, [], ()
+    Sirf Title ke liye: No *, ., #, [], ()
     """
     if not text: return ""
-    # Remove specific characters including hash inside title/caption
+    # Remove specific characters
     cleaned = re.sub(r'[*\.#\[\]\(\)]', '', text)
     # Remove multiple spaces
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned
 
-def get_affiliate_content(filename):
+def get_ai_title(filename):
     """
-    Pollination AI se Product-Based Content generate karega.
-    Format: Title ||| Caption ||| Hashtags
+    Pollination AI se sirf unique Title generate karega.
     """
     clean_filename = filename.replace("_", " ").replace("-", " ").split(".")[0]
     
-    # --- AFFILIATE MARKETING PROMPT ---
-    # Hum AI ko bol rahe hain ki response ko '|||' se divide kare
+    # Prompt: Explicitly asking to RENAME the product
     prompt = (
-        f"Act as an expert affiliate marketer. "
-        f"I have a product video file named '{clean_filename}'. "
-        "1. Write a short, catchy, attention-grabbing product title (No emojis, No hashtags). "
-        "2. Write a persuasive description/caption that says 'See this amazing unique product' or 'You need this gadget' (No emojis, No hashtags). "
-        "3. Write 10 high-ranking SEO hashtags separated by spaces (Include # here). "
-        "Output format strictly: Title ||| Caption ||| Hashtags"
+        f"Act as a copywriter. I have a video file named '{clean_filename}'. "
+        "Write a short, catchy, 5-word product title for this. "
+        "Do not use the exact filename. Make it sound like a hot new gadget or tool. "
+        "Do not use hashtags or emojis in the title."
     )
     
     encoded_prompt = urllib.parse.quote(prompt)
@@ -53,36 +57,14 @@ def get_affiliate_content(filename):
     try:
         response = requests.get(url)
         if response.status_code == 200:
-            raw_text = response.text
-            
-            # Response ko '|||' se split karte hain
-            parts = raw_text.split('|||')
-            
-            if len(parts) >= 3:
-                title_raw = parts[0]
-                caption_raw = parts[1]
-                hashtags_raw = parts[2]
-            else:
-                # Fallback agar AI ne format follow nahi kiya
-                title_raw = f"Amazing Unique Product {clean_filename}"
-                caption_raw = "Check out this useful gadget for your daily life It is very unique"
-                hashtags_raw = "#gadgets #musthave #amazonfinds"
-
-            # --- CLEANING ---
-            # Title aur Caption mein se symbols hatayenge
-            final_title = clean_text(title_raw)
-            final_caption = clean_text(caption_raw)
-            
-            # Hashtags mein se brackets hatayenge par # rehne denge
-            final_hashtags = re.sub(r'[\[\]\(\)\*\.]', '', hashtags_raw).strip()
-            
-            return final_title, final_caption, final_hashtags
+            raw_title = response.text
+            final_title = clean_title(raw_title)
+            return final_title
         else:
-            return clean_filename, "See this amazing product video", "#viral #product"
-            
+            return f"Amazing New Product {clean_filename}"
     except Exception as e:
         print(f"AI Generation Failed: {e}")
-        return clean_filename, "See this amazing product video", "#viral #product"
+        return f"Smart Gadget {clean_filename}"
 
 def load_history():
     if not os.path.exists(HISTORY_FILE):
@@ -137,15 +119,13 @@ def run_automation():
     
     print(f"Selected Video: {video_to_send}")
 
-    # 3. GENERATE AFFILIATE CONTENT
-    title, caption, hashtags = get_affiliate_content(video_to_send)
+    # 3. GENERATE TITLE ONLY
+    generated_title = get_ai_title(video_to_send)
     
-    print(f"Title: {title}")
-    print(f"Caption: {caption}")
-    print(f"Tags: {hashtags}")
-
-    # Telegram Message Format
-    telegram_message = f"{title}\n\n{caption}\n\n{hashtags}"
+    # Combine Title + Fixed Caption
+    full_caption_text = f"{generated_title}\n\n{PERMANENT_CAPTION}"
+    
+    print(f"Final Title: {generated_title}")
 
     # 4. SEND TO TELEGRAM
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
@@ -154,7 +134,7 @@ def run_automation():
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
             payload = {
                 'chat_id': TELEGRAM_CHAT_ID, 
-                'caption': telegram_message
+                'caption': full_caption_text
             }
             files = {'video': video_file}
             try:
@@ -170,9 +150,8 @@ def run_automation():
         
         webhook_data = {
             "video_url": raw_video_url,
-            "title": title,
-            "caption": caption,
-            "hashtags": hashtags,
+            "title": generated_title,
+            "caption": PERMANENT_CAPTION,
             "source": "AffiliateBot"
         }
         try:
