@@ -12,32 +12,39 @@ HISTORY_FILE = "history.json"
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY")  # Format: username/repo
-BRANCH_NAME = "main"  # Ya 'master' check kar lena
+GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY")
+BRANCH_NAME = "main"
 
 # --- HELPER FUNCTIONS ---
 
 def clean_text(text):
     """
-    User condition: No *, ., #, or brackets [] ()
+    Title aur Caption ke liye strict cleaner.
+    Removes *, ., #, [], ()
     """
-    # Remove specific characters
+    if not text: return ""
+    # Remove specific characters including hash inside title/caption
     cleaned = re.sub(r'[*\.#\[\]\(\)]', '', text)
-    # Remove multiple spaces and strip
+    # Remove multiple spaces
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned
 
-def get_pollination_text(filename):
+def get_affiliate_content(filename):
     """
-    Uses Pollination AI (No API Key) to generate text based on filename.
+    Pollination AI se Product-Based Content generate karega.
+    Format: Title ||| Caption ||| Hashtags
     """
     clean_filename = filename.replace("_", " ").replace("-", " ").split(".")[0]
     
-    # Prompt engineering specifically for this logic
+    # --- AFFILIATE MARKETING PROMPT ---
+    # Hum AI ko bol rahe hain ki response ko '|||' se divide kare
     prompt = (
-        f"Write a short engaging viral caption for a video titled '{clean_filename}'. "
-        "Include SEO keywords at the end. "
-        "Do not use emojis. Keep it under 50 words."
+        f"Act as an expert affiliate marketer. "
+        f"I have a product video file named '{clean_filename}'. "
+        "1. Write a short, catchy, attention-grabbing product title (No emojis, No hashtags). "
+        "2. Write a persuasive description/caption that says 'See this amazing unique product' or 'You need this gadget' (No emojis, No hashtags). "
+        "3. Write 10 high-ranking SEO hashtags separated by spaces (Include # here). "
+        "Output format strictly: Title ||| Caption ||| Hashtags"
     )
     
     encoded_prompt = urllib.parse.quote(prompt)
@@ -48,18 +55,34 @@ def get_pollination_text(filename):
         if response.status_code == 200:
             raw_text = response.text
             
-            # Text ko clean karte hain (No dots, stars, hashes)
-            final_text = clean_text(raw_text)
+            # Response ko '|||' se split karte hain
+            parts = raw_text.split('|||')
             
-            # Title generate karte hain (First 5 words of caption)
-            title = " ".join(final_text.split()[:6])
+            if len(parts) >= 3:
+                title_raw = parts[0]
+                caption_raw = parts[1]
+                hashtags_raw = parts[2]
+            else:
+                # Fallback agar AI ne format follow nahi kiya
+                title_raw = f"Amazing Unique Product {clean_filename}"
+                caption_raw = "Check out this useful gadget for your daily life It is very unique"
+                hashtags_raw = "#gadgets #musthave #amazonfinds"
+
+            # --- CLEANING ---
+            # Title aur Caption mein se symbols hatayenge
+            final_title = clean_text(title_raw)
+            final_caption = clean_text(caption_raw)
             
-            return title, final_text
+            # Hashtags mein se brackets hatayenge par # rehne denge
+            final_hashtags = re.sub(r'[\[\]\(\)\*\.]', '', hashtags_raw).strip()
+            
+            return final_title, final_caption, final_hashtags
         else:
-            return clean_filename, f"Watch this amazing video about {clean_filename}"
+            return clean_filename, "See this amazing product video", "#viral #product"
+            
     except Exception as e:
         print(f"AI Generation Failed: {e}")
-        return clean_filename, f"Watch this amazing video about {clean_filename}"
+        return clean_filename, "See this amazing product video", "#viral #product"
 
 def load_history():
     if not os.path.exists(HISTORY_FILE):
@@ -74,12 +97,12 @@ def save_history(data):
 # --- MAIN LOGIC ---
 
 def run_automation():
-    # 1. Purani files delete karo (15 days rule)
+    # 1. DELETE OLD FILES (15 Days Logic)
     history = load_history()
     today = datetime.date.today()
     new_history = []
     
-    print("Checking for files to delete (older than 15 days)...")
+    print("Checking for expired videos...")
     for entry in history:
         sent_date = datetime.date.fromisoformat(entry['date_sent'])
         days_diff = (today - sent_date).days
@@ -87,21 +110,16 @@ def run_automation():
         file_path = os.path.join(VIDEO_FOLDER, entry['filename'])
         
         if days_diff >= 15:
-            # Delete file physically
             if os.path.exists(file_path):
                 os.remove(file_path)
-                print(f"DELETED EXPIRED VIDEO: {entry['filename']}")
-            else:
-                print(f"File already gone: {entry['filename']}")
-            # History se remove (by not adding to new_history)
+                print(f"DELETED EXPIRED: {entry['filename']}")
         else:
             new_history.append(entry)
     
-    # Save clean history immediately
     save_history(new_history)
-    history = new_history # Update local variable
+    history = new_history 
 
-    # 2. Pick New Video
+    # 2. PICK NEW VIDEO
     if not os.path.exists(VIDEO_FOLDER):
         os.makedirs(VIDEO_FOLDER)
         
@@ -119,58 +137,56 @@ def run_automation():
     
     print(f"Selected Video: {video_to_send}")
 
-    # 3. Generate Content (Pollination AI + Cleaning)
-    title, caption = get_pollination_text(video_to_send)
+    # 3. GENERATE AFFILIATE CONTENT
+    title, caption, hashtags = get_affiliate_content(video_to_send)
     
-    # Note: Caption mein hi keywords included honge but bina # ke (kyunki user ne mana kiya hai)
-    full_message = f"{title}\n\n{caption}"
-    
-    print(f"Generated Title: {title}")
-    print(f"Generated Caption: {caption}")
+    print(f"Title: {title}")
+    print(f"Caption: {caption}")
+    print(f"Tags: {hashtags}")
 
-    # 4. Send to Telegram (VIDEO FILE)
+    # Telegram Message Format
+    telegram_message = f"{title}\n\n{caption}\n\n{hashtags}"
+
+    # 4. SEND TO TELEGRAM
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        print("Sending Video File to Telegram...")
+        print("Sending to Telegram...")
         with open(video_path, 'rb') as video_file:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
             payload = {
                 'chat_id': TELEGRAM_CHAT_ID, 
-                'caption': full_message
+                'caption': telegram_message
             }
             files = {'video': video_file}
             try:
-                r = requests.post(url, data=payload, files=files)
-                print(f"Telegram Status: {r.status_code}")
+                requests.post(url, data=payload, files=files)
             except Exception as e:
                 print(f"Telegram Error: {e}")
 
-    # 5. Send to Webhook (VIDEO URL)
+    # 5. SEND TO WEBHOOK
     if WEBHOOK_URL and GITHUB_REPO:
-        print("Sending URL to Webhook...")
-        # GitHub Raw URL Construction
+        print("Sending to Webhook...")
         raw_video_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{BRANCH_NAME}/{VIDEO_FOLDER}/{video_to_send}"
-        # URL mein space agar ho to encode karo
         raw_video_url = raw_video_url.replace(" ", "%20")
         
         webhook_data = {
             "video_url": raw_video_url,
             "title": title,
             "caption": caption,
-            "source": "GitHub Automation"
+            "hashtags": hashtags,
+            "source": "AffiliateBot"
         }
         try:
-            r = requests.post(WEBHOOK_URL, json=webhook_data)
-            print(f"Webhook Status: {r.status_code}")
+            requests.post(WEBHOOK_URL, json=webhook_data)
         except Exception as e:
             print(f"Webhook Error: {e}")
 
-    # 6. Update History
+    # 6. UPDATE HISTORY
     new_history.append({
         "filename": video_to_send,
         "date_sent": today.isoformat()
     })
     save_history(new_history)
-    print("History updated.")
+    print("Automation Complete.")
 
 if __name__ == "__main__":
     run_automation()
