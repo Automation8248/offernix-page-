@@ -33,7 +33,7 @@ TITLES_GRID = [
     "Stop Scrolling and Watch This!",
     "The Ultimate Problem Solver",
     "Best Gift Idea for 2026",
-    "Hidden Gem Product Found 💎"
+    "Hidden Gem Product Found 💎",
     "This Made My Life Easier",
     "I Didn’t Know I Needed This",
     "Why Is Everyone Buying This?",
@@ -677,6 +677,7 @@ INSTA_HASHTAGS = """
 .
 .
 "#Affiliate #BestDeals #SmartGadgets #TopProduct #Shopping"
+"""
 
 
 # --- HELPER FUNCTIONS ---
